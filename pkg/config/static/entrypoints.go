@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	ptypes "github.com/traefik/paerser/types"
+
 	"github.com/traefik/traefik/v2/pkg/types"
 )
 
@@ -19,6 +20,7 @@ type EntryPoint struct {
 	HTTP2            *HTTP2Config          `description:"HTTP/2 configuration." json:"http2,omitempty" toml:"http2,omitempty" yaml:"http2,omitempty" export:"true"`
 	HTTP3            *HTTP3Config          `description:"HTTP/3 configuration." json:"http3,omitempty" toml:"http3,omitempty" yaml:"http3,omitempty" label:"allowEmpty" file:"allowEmpty" export:"true"`
 	UDP              *UDPConfig            `description:"UDP configuration." json:"udp,omitempty" toml:"udp,omitempty" yaml:"udp,omitempty"`
+	SCION            *SCIONConfig          `description:"SCION configuration." json:"scion,omitempty" toml:"scion,omitempty" yaml:"scion,omitempty"`
 }
 
 // GetAddress strips any potential protocol part of the address field of the
@@ -137,6 +139,12 @@ func (t *EntryPointsTransport) SetDefaults() {
 // UDPConfig is the UDP configuration of an entry point.
 type UDPConfig struct {
 	Timeout ptypes.Duration `description:"Timeout defines how long to wait on an idle session before releasing the related resources." json:"timeout,omitempty" toml:"timeout,omitempty" yaml:"timeout,omitempty"`
+}
+
+type SCIONConfig struct {
+	AdvertisedPort int             `description:"UDP port to advertise, on which SCION is available." json:"advertisedPort,omitempty" toml:"advertisedPort,omitempty" yaml:"advertisedPort,omitempty" export:"true"`
+	StrictScion    string          `description:"Strict-SCION header to add with provided value (similar to HSTS), if not already present" json:"strictScion,omitempty" toml:"strictScion,omitempty" yaml:"strictScion,omitempty" export:"true"`
+	Timeout        ptypes.Duration `description:"Timeout defines how long to wait on an idle session before releasing the related resources." json:"timeout,omitempty" toml:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
 // SetDefaults sets the default values.

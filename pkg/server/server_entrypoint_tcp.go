@@ -17,6 +17,9 @@ import (
 	"github.com/containous/alice"
 	"github.com/pires/go-proxyproto"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
+
 	"github.com/traefik/traefik/v2/pkg/config/static"
 	"github.com/traefik/traefik/v2/pkg/ip"
 	"github.com/traefik/traefik/v2/pkg/log"
@@ -28,8 +31,6 @@ import (
 	tcprouter "github.com/traefik/traefik/v2/pkg/server/router/tcp"
 	"github.com/traefik/traefik/v2/pkg/tcp"
 	"github.com/traefik/traefik/v2/pkg/types"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 )
 
 var httpServerLogger = stdlog.New(log.WithoutContext().WriterLevel(logrus.DebugLevel), "", 0)
@@ -77,6 +78,10 @@ func NewTCPEntryPoints(entryPointsConfig static.EntryPoints, hostResolverConfig 
 
 		if protocol != "tcp" {
 			continue
+		}
+
+		if config.HTTP3 != nil && config.SCION != nil {
+			return nil, fmt.Errorf("cannot use http3 and scion on the same entrypoint")
 		}
 
 		ctx := log.With(context.Background(), log.Str(log.EntryPointName, entryPointName))
@@ -134,6 +139,7 @@ type TCPEntryPoint struct {
 	httpsServer            *httpServer
 
 	http3Server *http3server
+	scionServer *scionServer
 }
 
 // NewTCPEntryPoint creates a new TCPEntryPoint.
@@ -166,6 +172,11 @@ func NewTCPEntryPoint(ctx context.Context, configuration *static.EntryPoint, hos
 		return nil, fmt.Errorf("error preparing http3 server: %w", err)
 	}
 
+	scionServer, err := newSCIONServer(ctx, configuration, httpsServer)
+	if err != nil {
+		return nil, fmt.Errorf("error preparing scion server: %w", err)
+	}
+
 	rt.SetHTTPSForwarder(httpsServer.Forwarder)
 
 	tcpSwitcher := &tcp.HandlerSwitcher{}
@@ -179,6 +190,7 @@ func NewTCPEntryPoint(ctx context.Context, configuration *static.EntryPoint, hos
 		httpServer:             httpServer,
 		httpsServer:            httpsServer,
 		http3Server:            h3Server,
+		scionServer:            scionServer,
 	}, nil
 }
 
@@ -189,6 +201,10 @@ func (e *TCPEntryPoint) Start(ctx context.Context) {
 
 	if e.http3Server != nil {
 		go func() { _ = e.http3Server.Start() }()
+	}
+
+	if e.scionServer != nil {
+		go func() { _ = e.scionServer.Start() }()
 	}
 
 	for {
@@ -288,6 +304,11 @@ func (e *TCPEntryPoint) Shutdown(ctx context.Context) {
 			wg.Add(1)
 			go shutdownServer(e.http3Server)
 		}
+
+		if e.scionServer != nil {
+			wg.Add(1)
+			go shutdownServer(e.scionServer)
+		}
 	}
 
 	if e.tracker != nil {
@@ -333,6 +354,10 @@ func (e *TCPEntryPoint) SwitchRouter(rt *tcprouter.Router) {
 
 	if e.http3Server != nil {
 		e.http3Server.Switch(rt)
+	}
+
+	if e.scionServer != nil {
+		e.scionServer.Switch(rt)
 	}
 }
 
