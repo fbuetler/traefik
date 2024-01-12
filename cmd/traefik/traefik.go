@@ -192,12 +192,17 @@ func setupServer(staticConfiguration *static.Configuration) (*server.Server, err
 
 	// Entrypoints
 
-	serverEntryPointsTCP, err := server.NewTCPEntryPoints(staticConfiguration.EntryPoints, staticConfiguration.HostResolver)
+	serverEntryPointsTCP, err := server.NewTCPEntryPoints(staticConfiguration.EntryPoints, staticConfiguration.HostResolver, staticConfiguration.SCION)
 	if err != nil {
 		return nil, err
 	}
 
 	serverEntryPointsUDP, err := server.NewUDPEntryPoints(staticConfiguration.EntryPoints)
+	if err != nil {
+		return nil, err
+	}
+
+	serverEntryPointsQUIC, err := server.NewQUICEntryPoints(staticConfiguration.EntryPoints, staticConfiguration.HostResolver)
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +291,7 @@ func setupServer(staticConfiguration *static.Configuration) (*server.Server, err
 	})
 
 	// Switch router
-	watcher.AddListener(switchRouter(routerFactory, serverEntryPointsTCP, serverEntryPointsUDP))
+	watcher.AddListener(switchRouter(routerFactory, serverEntryPointsTCP, serverEntryPointsUDP, serverEntryPointsQUIC))
 
 	// Metrics
 	if metricsRegistry.IsEpEnabled() || metricsRegistry.IsRouterEnabled() || metricsRegistry.IsSvcEnabled() {
@@ -322,7 +327,7 @@ func setupServer(staticConfiguration *static.Configuration) (*server.Server, err
 		}
 	})
 
-	return server.NewServer(routinesPool, serverEntryPointsTCP, serverEntryPointsUDP, watcher, chainBuilder, accessLog), nil
+	return server.NewServer(routinesPool, serverEntryPointsTCP, serverEntryPointsUDP, serverEntryPointsQUIC, watcher, chainBuilder, accessLog), nil
 }
 
 func getHTTPChallengeHandler(acmeProviders []*acme.Provider, httpChallengeProvider http.Handler) http.Handler {
@@ -354,14 +359,15 @@ func getDefaultsEntrypoints(staticConfiguration *static.Configuration) []string 
 	return defaultEntryPoints
 }
 
-func switchRouter(routerFactory *server.RouterFactory, serverEntryPointsTCP server.TCPEntryPoints, serverEntryPointsUDP server.UDPEntryPoints) func(conf dynamic.Configuration) {
+func switchRouter(routerFactory *server.RouterFactory, serverEntryPointsTCP server.TCPEntryPoints, serverEntryPointsUDP server.UDPEntryPoints, serverEntryPointsQUIC server.QUICEntryPoints) func(conf dynamic.Configuration) {
 	return func(conf dynamic.Configuration) {
 		rtConf := runtime.NewConfig(conf)
 
-		routers, udpRouters := routerFactory.CreateRouters(rtConf)
+		routers, udpRouters, quicRouters := routerFactory.CreateRouters(rtConf)
 
 		serverEntryPointsTCP.Switch(routers)
 		serverEntryPointsUDP.Switch(udpRouters)
+		serverEntryPointsQUIC.Switch(quicRouters)
 	}
 }
 

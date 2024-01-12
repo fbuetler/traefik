@@ -12,13 +12,6 @@ import (
 	"github.com/traefik/traefik/v2/pkg/udp"
 )
 
-type stoppableListener interface {
-	Accept() (net.Conn, error)
-	Addr() net.Addr
-	Shutdown(graceTimeout time.Duration) error
-	Close() error
-}
-
 // UDPEntryPoints maps UDP entry points by their names.
 type UDPEntryPoints map[string]*UDPEntryPoint
 
@@ -35,7 +28,9 @@ func NewUDPEntryPoints(cfg static.EntryPoints) (UDPEntryPoints, error) {
 			continue
 		}
 
-		ep, err := NewUDPEntryPoint(entryPoint)
+		ctx := log.With(context.Background(), log.Str(log.EntryPointName, entryPointName))
+
+		ep, err := NewUDPEntryPoint(ctx, entryPoint)
 		if err != nil {
 			return nil, fmt.Errorf("error while building entryPoint %s: %w", entryPointName, err)
 		}
@@ -91,7 +86,7 @@ type UDPEntryPoint struct {
 }
 
 // NewUDPEntryPoint returns a UDP entry point.
-func NewUDPEntryPoint(cfg *static.EntryPoint) (*UDPEntryPoint, error) {
+func NewUDPEntryPoint(ctx context.Context, cfg *static.EntryPoint) (*UDPEntryPoint, error) {
 	addr, err := net.ResolveUDPAddr("udp", cfg.GetAddress())
 	if err != nil {
 		return nil, err

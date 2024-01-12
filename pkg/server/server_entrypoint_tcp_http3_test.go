@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/traefik/traefik/v2/pkg/config/static"
 	tcprouter "github.com/traefik/traefik/v2/pkg/server/router/tcp"
 	traefiktls "github.com/traefik/traefik/v2/pkg/tls"
@@ -93,7 +94,7 @@ func TestHTTP3AdvertisedPort(t *testing.T) {
 		HTTP3: &static.HTTP3Config{
 			AdvertisedPort: 8080,
 		},
-	}, nil)
+	}, nil, nil)
 	require.NoError(t, err)
 
 	router, err := tcprouter.NewRouter()

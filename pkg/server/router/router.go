@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/containous/alice"
+
 	"github.com/traefik/traefik/v2/pkg/config/runtime"
 	"github.com/traefik/traefik/v2/pkg/log"
 	"github.com/traefik/traefik/v2/pkg/metrics"
@@ -54,19 +55,19 @@ func NewManager(conf *runtime.Configuration, serviceManager serviceManager, midd
 	}
 }
 
-func (m *Manager) getHTTPRouters(ctx context.Context, entryPoints []string, tls bool, scion bool) map[string]map[string]*runtime.RouterInfo {
+func (m *Manager) getHTTPRouters(ctx context.Context, entryPoints []string, tls bool) map[string]map[string]*runtime.RouterInfo {
 	if m.conf != nil {
-		return m.conf.GetHTTPRoutersByEntryPoints(ctx, entryPoints, tls, scion)
+		return m.conf.GetHTTPRoutersByEntryPoints(ctx, entryPoints, tls)
 	}
 
 	return make(map[string]map[string]*runtime.RouterInfo)
 }
 
 // BuildHandlers Builds handler for all entry points.
-func (m *Manager) BuildHandlers(rootCtx context.Context, entryPoints []string, tls bool, scion bool) map[string]http.Handler {
+func (m *Manager) BuildHandlers(rootCtx context.Context, entryPoints []string, tls bool) map[string]http.Handler {
 	entryPointHandlers := make(map[string]http.Handler)
 
-	for entryPointName, routers := range m.getHTTPRouters(rootCtx, entryPoints, tls, scion) {
+	for entryPointName, routers := range m.getHTTPRouters(rootCtx, entryPoints, tls) {
 		entryPointName := entryPointName
 		ctx := log.With(rootCtx, log.Str(log.EntryPointName, entryPointName))
 

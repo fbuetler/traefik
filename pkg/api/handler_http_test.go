@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/traefik/traefik/v2/pkg/config/dynamic"
 	"github.com/traefik/traefik/v2/pkg/config/runtime"
 	"github.com/traefik/traefik/v2/pkg/config/static"
@@ -856,8 +857,8 @@ func TestHandler_HTTP(t *testing.T) {
 			rtConf := &test.conf
 			// To lazily initialize the Statuses.
 			rtConf.PopulateUsedBy()
-			rtConf.GetHTTPRoutersByEntryPoints(context.Background(), []string{"web"}, false, false)
-			rtConf.GetHTTPRoutersByEntryPoints(context.Background(), []string{"web"}, true, false)
+			rtConf.GetHTTPRoutersByEntryPoints(context.Background(), []string{"web"}, false)
+			rtConf.GetHTTPRoutersByEntryPoints(context.Background(), []string{"web"}, true)
 
 			handler := New(static.Configuration{API: &static.API{}, Global: &static.Global{}}, rtConf)
 			server := httptest.NewServer(handler.createRouter())

@@ -25,7 +25,7 @@ func TestShutdownUDPConn(t *testing.T) {
 	}
 	ep.SetDefaults()
 
-	entryPoint, err := NewUDPEntryPoint(&ep)
+	entryPoint, err := NewUDPEntryPoint(context.Background(), &ep)
 	require.NoError(t, err)
 
 	go entryPoint.Start(context.Background())

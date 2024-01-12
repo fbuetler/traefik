@@ -1,61 +1,38 @@
-package tcp
+package quic
 
 import (
 	"context"
 	"crypto/tls"
-	"errors"
-	"fmt"
 	"net/http"
 
 	"github.com/traefik/traefik/v2/pkg/config/runtime"
 	"github.com/traefik/traefik/v2/pkg/log"
 	"github.com/traefik/traefik/v2/pkg/middlewares/snicheck"
 	httpmuxer "github.com/traefik/traefik/v2/pkg/muxer/http"
-	tcpmuxer "github.com/traefik/traefik/v2/pkg/muxer/tcp"
 	"github.com/traefik/traefik/v2/pkg/server/provider"
-	tcpservice "github.com/traefik/traefik/v2/pkg/server/service/tcp"
-	"github.com/traefik/traefik/v2/pkg/tcp"
 	traefiktls "github.com/traefik/traefik/v2/pkg/tls"
 )
 
-type middlewareBuilder interface {
-	BuildChain(ctx context.Context, names []string) *tcp.Chain
-}
-
 // NewManager Creates a new Manager.
 func NewManager(conf *runtime.Configuration,
-	serviceManager *tcpservice.Manager,
-	middlewaresBuilder middlewareBuilder,
 	httpHandlers map[string]http.Handler,
 	httpsHandlers map[string]http.Handler,
 	tlsManager *traefiktls.Manager,
 ) *Manager {
 	return &Manager{
-		serviceManager:     serviceManager,
-		middlewaresBuilder: middlewaresBuilder,
-		httpHandlers:       httpHandlers,
-		httpsHandlers:      httpsHandlers,
-		tlsManager:         tlsManager,
-		conf:               conf,
+		httpHandlers:  httpHandlers,
+		httpsHandlers: httpsHandlers,
+		tlsManager:    tlsManager,
+		conf:          conf,
 	}
 }
 
 // Manager is a route/router manager.
 type Manager struct {
-	serviceManager     *tcpservice.Manager
-	middlewaresBuilder middlewareBuilder
-	httpHandlers       map[string]http.Handler
-	httpsHandlers      map[string]http.Handler
-	tlsManager         *traefiktls.Manager
-	conf               *runtime.Configuration
-}
-
-func (m *Manager) getTCPRouters(ctx context.Context, entryPoints []string) map[string]map[string]*runtime.TCPRouterInfo {
-	if m.conf != nil {
-		return m.conf.GetTCPRoutersByEntryPoints(ctx, entryPoints)
-	}
-
-	return make(map[string]map[string]*runtime.TCPRouterInfo)
+	httpHandlers  map[string]http.Handler
+	httpsHandlers map[string]http.Handler
+	tlsManager    *traefiktls.Manager
+	conf          *runtime.Configuration
 }
 
 func (m *Manager) getHTTPRouters(ctx context.Context, entryPoints []string, tls bool) map[string]map[string]*runtime.RouterInfo {
@@ -68,18 +45,14 @@ func (m *Manager) getHTTPRouters(ctx context.Context, entryPoints []string, tls 
 
 // BuildHandlers builds the handlers for the given entrypoints.
 func (m *Manager) BuildHandlers(rootCtx context.Context, entryPoints []string) map[string]*Router {
-	entryPointsRouters := m.getTCPRouters(rootCtx, entryPoints)
 	entryPointsRoutersHTTP := m.getHTTPRouters(rootCtx, entryPoints, true)
 
 	entryPointHandlers := make(map[string]*Router)
 	for _, entryPointName := range entryPoints {
 		entryPointName := entryPointName
 
-		routers := entryPointsRouters[entryPointName]
-
 		ctx := log.With(rootCtx, log.Str(log.EntryPointName, entryPointName))
-
-		handler, err := m.buildEntryPointHandler(ctx, routers, entryPointsRoutersHTTP[entryPointName], m.httpHandlers[entryPointName], m.httpsHandlers[entryPointName])
+		handler, err := m.buildEntryPointHandlers(ctx, entryPointsRoutersHTTP[entryPointName], m.httpHandlers[entryPointName], m.httpsHandlers[entryPointName])
 		if err != nil {
 			log.FromContext(ctx).Error(err)
 			continue
@@ -94,7 +67,7 @@ type nameAndConfig struct {
 	TLSConfig  *tls.Config
 }
 
-func (m *Manager) buildEntryPointHandler(ctx context.Context, configs map[string]*runtime.TCPRouterInfo, configsHTTP map[string]*runtime.RouterInfo, handlerHTTP, handlerHTTPS http.Handler) (*Router, error) {
+func (m *Manager) buildEntryPointHandlers(ctx context.Context, configsHTTP map[string]*runtime.RouterInfo, handlerHTTP, handlerHTTPS http.Handler) (*Router, error) {
 	// Build a new Router.
 	router, err := NewRouter()
 	if err != nil {
@@ -251,161 +224,5 @@ func (m *Manager) buildEntryPointHandler(ctx context.Context, configs map[string
 		router.AddHTTPTLSConfig(hostSNI, defaultTLSConf)
 	}
 
-	m.addTCPHandlers(ctx, configs, router)
-
 	return router, nil
-}
-
-// addTCPHandlers creates the TCP handlers defined in configs, and adds them to router.
-func (m *Manager) addTCPHandlers(ctx context.Context, configs map[string]*runtime.TCPRouterInfo, router *Router) {
-	for routerName, routerConfig := range configs {
-		ctxRouter := log.With(provider.AddInContext(ctx, routerName), log.Str(log.RouterName, routerName))
-		logger := log.FromContext(ctxRouter)
-
-		if routerConfig.Service == "" {
-			err := errors.New("the service is missing on the router")
-			routerConfig.AddError(err, true)
-			logger.Error(err)
-			continue
-		}
-
-		if routerConfig.Rule == "" {
-			err := errors.New("router has no rule")
-			routerConfig.AddError(err, true)
-			logger.Error(err)
-			continue
-		}
-
-		domains, err := tcpmuxer.ParseHostSNI(routerConfig.Rule)
-		if err != nil {
-			routerErr := fmt.Errorf("invalid rule: %q , %w", routerConfig.Rule, err)
-			routerConfig.AddError(routerErr, true)
-			logger.Error(routerErr)
-			continue
-		}
-
-		// HostSNI Rule, but TLS not set on the router, which is an error.
-		// However, we allow the HostSNI(*) exception.
-		if len(domains) > 0 && routerConfig.TLS == nil && domains[0] != "*" {
-			routerErr := fmt.Errorf("invalid rule: %q , has HostSNI matcher, but no TLS on router", routerConfig.Rule)
-			routerConfig.AddError(routerErr, true)
-			logger.Error(routerErr)
-		}
-
-		var handler tcp.Handler
-		if routerConfig.TLS == nil || routerConfig.TLS.Passthrough {
-			handler, err = m.buildTCPHandler(ctxRouter, routerConfig)
-			if err != nil {
-				routerConfig.AddError(err, true)
-				logger.Error(err)
-				continue
-			}
-		}
-
-		if routerConfig.TLS == nil {
-			logger.Debugf("Adding route for %q", routerConfig.Rule)
-			if err := router.AddRoute(routerConfig.Rule, routerConfig.Priority, handler); err != nil {
-				routerConfig.AddError(err, true)
-				logger.Error(err)
-			}
-			continue
-		}
-
-		if routerConfig.TLS.Passthrough {
-			logger.Debugf("Adding Passthrough route for %q", routerConfig.Rule)
-			if err := router.muxerTCPTLS.AddRoute(routerConfig.Rule, routerConfig.Priority, handler); err != nil {
-				routerConfig.AddError(err, true)
-				logger.Error(err)
-			}
-			continue
-		}
-
-		for _, domain := range domains {
-			if httpmuxer.IsASCII(domain) {
-				continue
-			}
-
-			asciiError := fmt.Errorf("invalid domain name value %q, non-ASCII characters are not allowed", domain)
-			routerConfig.AddError(asciiError, true)
-			logger.Error(asciiError)
-		}
-
-		tlsOptionsName := routerConfig.TLS.Options
-
-		if len(tlsOptionsName) == 0 {
-			tlsOptionsName = traefiktls.DefaultTLSConfigName
-		}
-
-		if tlsOptionsName != traefiktls.DefaultTLSConfigName {
-			tlsOptionsName = provider.GetQualifiedName(ctxRouter, tlsOptionsName)
-		}
-
-		tlsConf, err := m.tlsManager.Get(traefiktls.DefaultTLSStoreName, tlsOptionsName)
-		if err != nil {
-			routerConfig.AddError(err, true)
-
-			logger.Error(err)
-			logger.Debugf("Adding special TLS closing route for %q because broken TLS options %s", routerConfig.Rule, tlsOptionsName)
-
-			err = router.muxerTCPTLS.AddRoute(routerConfig.Rule, routerConfig.Priority, &brokenTLSRouter{})
-			if err != nil {
-				routerConfig.AddError(err, true)
-				logger.Error(err)
-			}
-			continue
-		}
-
-		// Now that the Rule is not just about the Host, we could theoretically have a config like:
-		//	router1:
-		//		rule: HostSNI(foo.com) && ClientIP(IP1)
-		//		tlsOption: tlsOne
-		//	router2:
-		//		rule: HostSNI(foo.com) && ClientIP(IP2)
-		//		tlsOption: tlsTwo
-		// i.e. same HostSNI but different tlsOptions
-		// This is only applicable if the muxer can decide about the routing _before_ telling the client about the tlsConf (i.e. before the TLS HandShake).
-		// This seems to be the case so far with the existing matchers (HostSNI, and ClientIP), so it's all good.
-		// Otherwise, we would have to do as for HTTPS, i.e. disallow different TLS configs for the same HostSNIs.
-
-		handler, err = m.buildTCPHandler(ctxRouter, routerConfig)
-		if err != nil {
-			routerConfig.AddError(err, true)
-			logger.Error(err)
-			continue
-		}
-
-		handler = &tcp.TLSHandler{
-			Next:   handler,
-			Config: tlsConf,
-		}
-
-		logger.Debugf("Adding TLS route for %q", routerConfig.Rule)
-
-		err = router.muxerTCPTLS.AddRoute(routerConfig.Rule, routerConfig.Priority, handler)
-		if err != nil {
-			routerConfig.AddError(err, true)
-			logger.Error(err)
-		}
-	}
-}
-
-func (m *Manager) buildTCPHandler(ctx context.Context, router *runtime.TCPRouterInfo) (tcp.Handler, error) {
-	var qualifiedNames []string
-	for _, name := range router.Middlewares {
-		qualifiedNames = append(qualifiedNames, provider.GetQualifiedName(ctx, name))
-	}
-	router.Middlewares = qualifiedNames
-
-	if router.Service == "" {
-		return nil, errors.New("the service is missing on the router")
-	}
-
-	sHandler, err := m.serviceManager.BuildTCP(ctx, router.Service)
-	if err != nil {
-		return nil, err
-	}
-
-	mHandler := m.middlewaresBuilder.BuildChain(ctx, router.Middlewares)
-
-	return tcp.NewChain().Extend(*mHandler).Then(sHandler)
 }

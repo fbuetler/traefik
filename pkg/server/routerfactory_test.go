@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
 	"github.com/traefik/traefik/v2/pkg/config/dynamic"
 	"github.com/traefik/traefik/v2/pkg/config/runtime"
 	"github.com/traefik/traefik/v2/pkg/config/static"
@@ -55,7 +56,7 @@ func TestReuseService(t *testing.T) {
 
 	factory := NewRouterFactory(staticConfig, managerFactory, tlsManager, middleware.NewChainBuilder(nil, nil, nil), nil, metrics.NewVoidRegistry())
 
-	entryPointsHandlers, _ := factory.CreateRouters(runtime.NewConfig(dynamic.Configuration{HTTP: dynamicConfigs}))
+	entryPointsHandlers, _, _ := factory.CreateRouters(runtime.NewConfig(dynamic.Configuration{HTTP: dynamicConfigs}))
 
 	// Test that the /ok path returns a status 200.
 	responseRecorderOk := &httptest.ResponseRecorder{}
@@ -191,7 +192,7 @@ func TestServerResponseEmptyBackend(t *testing.T) {
 
 			factory := NewRouterFactory(staticConfig, managerFactory, tlsManager, middleware.NewChainBuilder(nil, nil, nil), nil, metrics.NewVoidRegistry())
 
-			entryPointsHandlers, _ := factory.CreateRouters(runtime.NewConfig(dynamic.Configuration{HTTP: test.config(testServer.URL)}))
+			entryPointsHandlers, _, _ := factory.CreateRouters(runtime.NewConfig(dynamic.Configuration{HTTP: test.config(testServer.URL)}))
 
 			responseRecorder := &httptest.ResponseRecorder{}
 			request := httptest.NewRequest(http.MethodGet, testServer.URL+requestPath, nil)
@@ -234,7 +235,7 @@ func TestInternalServices(t *testing.T) {
 
 	factory := NewRouterFactory(staticConfig, managerFactory, tlsManager, middleware.NewChainBuilder(voidRegistry, nil, nil), nil, voidRegistry)
 
-	entryPointsHandlers, _ := factory.CreateRouters(runtime.NewConfig(dynamic.Configuration{HTTP: dynamicConfigs}))
+	entryPointsHandlers, _, _ := factory.CreateRouters(runtime.NewConfig(dynamic.Configuration{HTTP: dynamicConfigs}))
 
 	// Test that the /ok path returns a status 200.
 	responseRecorderOk := &httptest.ResponseRecorder{}

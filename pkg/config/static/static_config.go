@@ -9,6 +9,7 @@ import (
 	legolog "github.com/go-acme/lego/v4/log"
 	"github.com/sirupsen/logrus"
 	ptypes "github.com/traefik/paerser/types"
+
 	"github.com/traefik/traefik/v2/pkg/log"
 	"github.com/traefik/traefik/v2/pkg/ping"
 	acmeprovider "github.com/traefik/traefik/v2/pkg/provider/acme"
@@ -75,12 +76,18 @@ type Configuration struct {
 
 	HostResolver *types.HostResolverConfig `description:"Enable CNAME Flattening." json:"hostResolver,omitempty" toml:"hostResolver,omitempty" yaml:"hostResolver,omitempty" label:"allowEmpty" file:"allowEmpty" export:"true"`
 
+	SCION *SCION `description:"SCION configuration." json:"scion,omitempty" toml:"scion,omitempty" yaml:"scion,omitempty"`
+
 	CertificatesResolvers map[string]CertificateResolver `description:"Certificates resolvers configuration." json:"certificatesResolvers,omitempty" toml:"certificatesResolvers,omitempty" yaml:"certificatesResolvers,omitempty" export:"true"`
 
 	// Deprecated.
 	Pilot *Pilot `description:"Traefik Pilot configuration (Deprecated)." json:"pilot,omitempty" toml:"pilot,omitempty" yaml:"pilot,omitempty" export:"true"`
 
 	Experimental *Experimental `description:"experimental features." json:"experimental,omitempty" toml:"experimental,omitempty" yaml:"experimental,omitempty" export:"true"`
+}
+
+type SCION struct {
+	StrictScion string `description:"Strict-SCION header to add with provided value (similar to HSTS), if not already present" json:"strictScion,omitempty" toml:"strictScion,omitempty" yaml:"strictScion,omitempty" export:"true"`
 }
 
 // CertificateResolver contains the configuration for the different types of certificates resolver.

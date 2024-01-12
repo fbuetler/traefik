@@ -39,7 +39,7 @@ func (ep EntryPoint) GetProtocol() (string, error) {
 	}
 
 	protocol := strings.ToLower(splitN[1])
-	if protocol == "tcp" || protocol == "udp" {
+	if protocol == "tcp" || protocol == "udp" || protocol == "quic" {
 		return protocol, nil
 	}
 
@@ -141,10 +141,9 @@ type UDPConfig struct {
 	Timeout ptypes.Duration `description:"Timeout defines how long to wait on an idle session before releasing the related resources." json:"timeout,omitempty" toml:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
+// SCIONConfig is the SCION configuration of an entry point.
 type SCIONConfig struct {
-	AdvertisedPort int             `description:"UDP port to advertise, on which SCION is available." json:"advertisedPort,omitempty" toml:"advertisedPort,omitempty" yaml:"advertisedPort,omitempty" export:"true"`
-	StrictScion    string          `description:"Strict-SCION header to add with provided value (similar to HSTS), if not already present" json:"strictScion,omitempty" toml:"strictScion,omitempty" yaml:"strictScion,omitempty" export:"true"`
-	Timeout        ptypes.Duration `description:"Timeout defines how long to wait on an idle session before releasing the related resources." json:"timeout,omitempty" toml:"timeout,omitempty" yaml:"timeout,omitempty"`
+	Timeout ptypes.Duration `description:"Timeout defines how long to wait on an idle session before releasing the related resources." json:"timeout,omitempty" toml:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
 // SetDefaults sets the default values.

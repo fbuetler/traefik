@@ -16,10 +16,11 @@ import (
 
 // Server is the reverse-proxy/load-balancer engine.
 type Server struct {
-	watcher        *ConfigurationWatcher
-	tcpEntryPoints TCPEntryPoints
-	udpEntryPoints UDPEntryPoints
-	chainBuilder   *middleware.ChainBuilder
+	watcher         *ConfigurationWatcher
+	tcpEntryPoints  TCPEntryPoints
+	udpEntryPoints  UDPEntryPoints
+	quicEntryPoints QUICEntryPoints
+	chainBuilder    *middleware.ChainBuilder
 
 	accessLoggerMiddleware *accesslog.Handler
 
@@ -30,7 +31,7 @@ type Server struct {
 }
 
 // NewServer returns an initialized Server.
-func NewServer(routinesPool *safe.Pool, entryPoints TCPEntryPoints, entryPointsUDP UDPEntryPoints, watcher *ConfigurationWatcher,
+func NewServer(routinesPool *safe.Pool, entryPoints TCPEntryPoints, entryPointsUDP UDPEntryPoints, entryPointsQUIC QUICEntryPoints, watcher *ConfigurationWatcher,
 	chainBuilder *middleware.ChainBuilder, accessLoggerMiddleware *accesslog.Handler,
 ) *Server {
 	srv := &Server{
@@ -42,6 +43,7 @@ func NewServer(routinesPool *safe.Pool, entryPoints TCPEntryPoints, entryPointsU
 		stopChan:               make(chan bool, 1),
 		routinesPool:           routinesPool,
 		udpEntryPoints:         entryPointsUDP,
+		quicEntryPoints:        entryPointsQUIC,
 	}
 
 	srv.configureSignals()
@@ -61,6 +63,7 @@ func (s *Server) Start(ctx context.Context) {
 
 	s.tcpEntryPoints.Start()
 	s.udpEntryPoints.Start()
+	s.quicEntryPoints.Start()
 	s.watcher.Start()
 
 	s.routinesPool.GoCtx(s.listenSignals)
@@ -77,6 +80,7 @@ func (s *Server) Stop() {
 
 	s.tcpEntryPoints.Stop()
 	s.udpEntryPoints.Stop()
+	s.quicEntryPoints.Stop()
 
 	s.stopChan <- true
 }

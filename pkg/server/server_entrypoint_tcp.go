@@ -35,14 +35,14 @@ import (
 
 var httpServerLogger = stdlog.New(log.WithoutContext().WriterLevel(logrus.DebugLevel), "", 0)
 
-type httpForwarder struct {
+type tcpForwarder struct {
 	net.Listener
 	connChan chan net.Conn
 	errChan  chan error
 }
 
-func newHTTPForwarder(ln net.Listener) *httpForwarder {
-	return &httpForwarder{
+func newTCPForwarder(ln net.Listener) *tcpForwarder {
+	return &tcpForwarder{
 		Listener: ln,
 		connChan: make(chan net.Conn),
 		errChan:  make(chan error),
@@ -50,12 +50,12 @@ func newHTTPForwarder(ln net.Listener) *httpForwarder {
 }
 
 // ServeTCP uses the connection to serve it later in "Accept".
-func (h *httpForwarder) ServeTCP(conn tcp.WriteCloser) {
+func (h *tcpForwarder) ServeTCP(conn tcp.WriteCloser) {
 	h.connChan <- conn
 }
 
 // Accept retrieves a served connection in ServeTCP.
-func (h *httpForwarder) Accept() (net.Conn, error) {
+func (h *tcpForwarder) Accept() (net.Conn, error) {
 	select {
 	case conn := <-h.connChan:
 		return conn, nil
@@ -68,7 +68,7 @@ func (h *httpForwarder) Accept() (net.Conn, error) {
 type TCPEntryPoints map[string]*TCPEntryPoint
 
 // NewTCPEntryPoints creates a new TCPEntryPoints.
-func NewTCPEntryPoints(entryPointsConfig static.EntryPoints, hostResolverConfig *types.HostResolverConfig) (TCPEntryPoints, error) {
+func NewTCPEntryPoints(entryPointsConfig static.EntryPoints, hostResolverConfig *types.HostResolverConfig, scion *static.SCION) (TCPEntryPoints, error) {
 	serverEntryPointsTCP := make(TCPEntryPoints)
 	for entryPointName, config := range entryPointsConfig {
 		protocol, err := config.GetProtocol()
@@ -80,13 +80,9 @@ func NewTCPEntryPoints(entryPointsConfig static.EntryPoints, hostResolverConfig 
 			continue
 		}
 
-		if config.HTTP3 != nil && config.SCION != nil {
-			return nil, fmt.Errorf("cannot use http3 and scion on the same entrypoint")
-		}
-
 		ctx := log.With(context.Background(), log.Str(log.EntryPointName, entryPointName))
 
-		serverEntryPointsTCP[entryPointName], err = NewTCPEntryPoint(ctx, config, hostResolverConfig)
+		serverEntryPointsTCP[entryPointName], err = NewTCPEntryPoint(ctx, config, hostResolverConfig, scion)
 		if err != nil {
 			return nil, fmt.Errorf("error while building entryPoint %s: %w", entryPointName, err)
 		}
@@ -139,14 +135,13 @@ type TCPEntryPoint struct {
 	httpsServer            *httpServer
 
 	http3Server *http3server
-	scionServer *scionServer
 }
 
 // NewTCPEntryPoint creates a new TCPEntryPoint.
-func NewTCPEntryPoint(ctx context.Context, configuration *static.EntryPoint, hostResolverConfig *types.HostResolverConfig) (*TCPEntryPoint, error) {
+func NewTCPEntryPoint(ctx context.Context, configuration *static.EntryPoint, hostResolverConfig *types.HostResolverConfig, scion *static.SCION) (*TCPEntryPoint, error) {
 	tracker := newConnectionTracker()
 
-	listener, err := buildListener(ctx, configuration)
+	listener, err := buildTCPListener(ctx, configuration)
 	if err != nil {
 		return nil, fmt.Errorf("error preparing server: %w", err)
 	}
@@ -155,14 +150,14 @@ func NewTCPEntryPoint(ctx context.Context, configuration *static.EntryPoint, hos
 
 	reqDecorator := requestdecorator.New(hostResolverConfig)
 
-	httpServer, err := createHTTPServer(ctx, listener, configuration, true, reqDecorator)
+	httpServer, err := createHttpServerWithTCPListener(ctx, listener, configuration, true, reqDecorator, scion)
 	if err != nil {
 		return nil, fmt.Errorf("error preparing http server: %w", err)
 	}
 
-	rt.SetHTTPForwarder(httpServer.Forwarder)
+	rt.SetHTTPForwarder(httpServer.TCPForwarder)
 
-	httpsServer, err := createHTTPServer(ctx, listener, configuration, false, reqDecorator)
+	httpsServer, err := createHttpServerWithTCPListener(ctx, listener, configuration, false, reqDecorator, scion)
 	if err != nil {
 		return nil, fmt.Errorf("error preparing https server: %w", err)
 	}
@@ -172,12 +167,7 @@ func NewTCPEntryPoint(ctx context.Context, configuration *static.EntryPoint, hos
 		return nil, fmt.Errorf("error preparing http3 server: %w", err)
 	}
 
-	scionServer, err := newSCIONServer(ctx, configuration, httpsServer)
-	if err != nil {
-		return nil, fmt.Errorf("error preparing scion server: %w", err)
-	}
-
-	rt.SetHTTPSForwarder(httpsServer.Forwarder)
+	rt.SetHTTPSForwarder(httpsServer.TCPForwarder)
 
 	tcpSwitcher := &tcp.HandlerSwitcher{}
 	tcpSwitcher.Switch(rt)
@@ -190,7 +180,6 @@ func NewTCPEntryPoint(ctx context.Context, configuration *static.EntryPoint, hos
 		httpServer:             httpServer,
 		httpsServer:            httpsServer,
 		http3Server:            h3Server,
-		scionServer:            scionServer,
 	}, nil
 }
 
@@ -201,10 +190,6 @@ func (e *TCPEntryPoint) Start(ctx context.Context) {
 
 	if e.http3Server != nil {
 		go func() { _ = e.http3Server.Start() }()
-	}
-
-	if e.scionServer != nil {
-		go func() { _ = e.scionServer.Start() }()
 	}
 
 	for {
@@ -222,8 +207,8 @@ func (e *TCPEntryPoint) Start(ctx context.Context) {
 				continue
 			}
 
-			e.httpServer.Forwarder.errChan <- err
-			e.httpsServer.Forwarder.errChan <- err
+			e.httpServer.TCPForwarder.errChan <- err
+			e.httpsServer.TCPForwarder.errChan <- err
 
 			return
 		}
@@ -304,11 +289,6 @@ func (e *TCPEntryPoint) Shutdown(ctx context.Context) {
 			wg.Add(1)
 			go shutdownServer(e.http3Server)
 		}
-
-		if e.scionServer != nil {
-			wg.Add(1)
-			go shutdownServer(e.scionServer)
-		}
 	}
 
 	if e.tracker != nil {
@@ -332,7 +312,7 @@ func (e *TCPEntryPoint) Shutdown(ctx context.Context) {
 
 // SwitchRouter switches the TCP router handler.
 func (e *TCPEntryPoint) SwitchRouter(rt *tcprouter.Router) {
-	rt.SetHTTPForwarder(e.httpServer.Forwarder)
+	rt.SetHTTPForwarder(e.httpServer.TCPForwarder)
 
 	httpHandler := rt.GetHTTPHandler()
 	if httpHandler == nil {
@@ -341,7 +321,7 @@ func (e *TCPEntryPoint) SwitchRouter(rt *tcprouter.Router) {
 
 	e.httpServer.Switcher.UpdateHandler(httpHandler)
 
-	rt.SetHTTPSForwarder(e.httpsServer.Forwarder)
+	rt.SetHTTPSForwarder(e.httpsServer.TCPForwarder)
 
 	httpsHandler := rt.GetHTTPSHandler()
 	if httpsHandler == nil {
@@ -354,10 +334,6 @@ func (e *TCPEntryPoint) SwitchRouter(rt *tcprouter.Router) {
 
 	if e.http3Server != nil {
 		e.http3Server.Switch(rt)
-	}
-
-	if e.scionServer != nil {
-		e.scionServer.Switch(rt)
 	}
 }
 
@@ -447,7 +423,7 @@ func buildProxyProtocolListener(ctx context.Context, entryPoint *static.EntryPoi
 	return proxyListener, nil
 }
 
-func buildListener(ctx context.Context, entryPoint *static.EntryPoint) (net.Listener, error) {
+func buildTCPListener(ctx context.Context, entryPoint *static.EntryPoint) (net.Listener, error) {
 	listener, err := net.Listen("tcp", entryPoint.GetAddress())
 	if err != nil {
 		return nil, fmt.Errorf("error opening listener: %w", err)
@@ -534,12 +510,25 @@ type stoppableServer interface {
 }
 
 type httpServer struct {
-	Server    stoppableServer
-	Forwarder *httpForwarder
-	Switcher  *middlewares.HTTPHandlerSwitcher
+	Server        stoppableServer
+	TCPForwarder  *tcpForwarder
+	QUICForwarder *quicForwarder
+	Switcher      *middlewares.HTTPHandlerSwitcher
 }
 
-func createHTTPServer(ctx context.Context, ln net.Listener, configuration *static.EntryPoint, withH2c bool, reqDecorator *requestdecorator.RequestDecorator) (*httpServer, error) {
+func createHttpServerWithTCPListener(ctx context.Context, ln net.Listener, configuration *static.EntryPoint, withH2c bool, reqDecorator *requestdecorator.RequestDecorator, scion *static.SCION) (*httpServer, error) {
+	listener := newTCPForwarder(ln)
+
+	httpServer, err := createHTTPServer(ctx, listener, configuration, true, reqDecorator, scion)
+	if err != nil {
+		return nil, fmt.Errorf("error preparing http server: %w", err)
+	}
+	httpServer.TCPForwarder = listener
+
+	return httpServer, nil
+}
+
+func createHTTPServer(ctx context.Context, listener net.Listener, configuration *static.EntryPoint, withH2c bool, reqDecorator *requestdecorator.RequestDecorator, scion *static.SCION) (*httpServer, error) {
 	if configuration.HTTP2.MaxConcurrentStreams < 0 {
 		return nil, errors.New("max concurrent streams value must be greater than or equal to zero")
 	}
@@ -565,6 +554,11 @@ func createHTTPServer(ctx context.Context, ln net.Listener, configuration *stati
 		handler = encodeQuerySemicolons(handler)
 	} else {
 		handler = http.AllowQuerySemicolons(handler)
+	}
+
+	handler, err = advertiseSCION(handler, scion)
+	if err != nil {
+		return nil, err
 	}
 
 	if withH2c {
@@ -595,7 +589,6 @@ func createHTTPServer(ctx context.Context, ln net.Listener, configuration *stati
 		}
 	}
 
-	listener := newHTTPForwarder(ln)
 	go func() {
 		err := serverHTTP.Serve(listener)
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -603,9 +596,8 @@ func createHTTPServer(ctx context.Context, ln net.Listener, configuration *stati
 		}
 	}()
 	return &httpServer{
-		Server:    serverHTTP,
-		Forwarder: listener,
-		Switcher:  httpSwitcher,
+		Server:   serverHTTP,
+		Switcher: httpSwitcher,
 	}, nil
 }
 
@@ -662,4 +654,27 @@ func denyFragment(h http.Handler) http.Handler {
 
 		h.ServeHTTP(rw, req)
 	})
+}
+
+// ErrNoStrictScion is the error returned by setScionHeaders when no strict SCION value was found to be announced.
+var ErrNoStrictScion = errors.New("server is listening for SCION but does not announce its address to be discovered")
+
+// inspired by quic-go/http3/server.SetQuicHeaders
+// https://github.com/quic-go/quic-go/blob/v0.39.1/http3/server.go#L681-L691
+func advertiseSCION(next http.Handler, scion *static.SCION) (http.Handler, error) {
+	if scion == nil {
+		return next, nil
+	}
+
+	if scion.StrictScion == "" {
+		return nil, ErrNoStrictScion
+	}
+
+	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		if rw.Header().Get("Strict-SCION") == "" {
+			rw.Header().Set("Strict-SCION", scion.StrictScion)
+		}
+
+		next.ServeHTTP(rw, req)
+	}), nil
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/containous/alice"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/traefik/traefik/v2/pkg/config/dynamic"
 	"github.com/traefik/traefik/v2/pkg/config/runtime"
 	"github.com/traefik/traefik/v2/pkg/metrics"
@@ -322,7 +323,7 @@ func TestRouterManager_Get(t *testing.T) {
 
 			routerManager := NewManager(rtConf, serviceManager, middlewaresBuilder, chainBuilder, metrics.NewVoidRegistry(), tlsManager)
 
-			handlers := routerManager.BuildHandlers(context.Background(), test.entryPoints, false, false)
+			handlers := routerManager.BuildHandlers(context.Background(), test.entryPoints, false)
 
 			w := httptest.NewRecorder()
 			req := testhelpers.MustNewRequest(http.MethodGet, "http://foo.bar/", nil)
@@ -429,7 +430,7 @@ func TestAccessLog(t *testing.T) {
 
 			routerManager := NewManager(rtConf, serviceManager, middlewaresBuilder, chainBuilder, metrics.NewVoidRegistry(), tlsManager)
 
-			handlers := routerManager.BuildHandlers(context.Background(), test.entryPoints, false, false)
+			handlers := routerManager.BuildHandlers(context.Background(), test.entryPoints, false)
 
 			w := httptest.NewRecorder()
 			req := testhelpers.MustNewRequest(http.MethodGet, "http://foo.bar/", nil)
@@ -792,8 +793,8 @@ func TestRuntimeConfiguration(t *testing.T) {
 
 			routerManager := NewManager(rtConf, serviceManager, middlewaresBuilder, chainBuilder, metrics.NewVoidRegistry(), tlsManager)
 
-			_ = routerManager.BuildHandlers(context.Background(), entryPoints, false, false)
-			_ = routerManager.BuildHandlers(context.Background(), entryPoints, true, false)
+			_ = routerManager.BuildHandlers(context.Background(), entryPoints, false)
+			_ = routerManager.BuildHandlers(context.Background(), entryPoints, true)
 
 			// even though rtConf was passed by argument to the manager builders above,
 			// it's ok to use it as the result we check, because everything worth checking
@@ -869,7 +870,7 @@ func TestProviderOnMiddlewares(t *testing.T) {
 
 	routerManager := NewManager(rtConf, serviceManager, middlewaresBuilder, chainBuilder, metrics.NewVoidRegistry(), tlsManager)
 
-	_ = routerManager.BuildHandlers(context.Background(), entryPoints, false, false)
+	_ = routerManager.BuildHandlers(context.Background(), entryPoints, false)
 
 	assert.Equal(t, []string{"chain@file", "m1@file"}, rtConf.Routers["router@file"].Middlewares)
 	assert.Equal(t, []string{"m1@file", "m2@file", "m1@file"}, rtConf.Middlewares["chain@file"].Chain.Middlewares)
@@ -938,7 +939,7 @@ func BenchmarkRouterServe(b *testing.B) {
 
 	routerManager := NewManager(rtConf, serviceManager, middlewaresBuilder, chainBuilder, metrics.NewVoidRegistry(), tlsManager)
 
-	handlers := routerManager.BuildHandlers(context.Background(), entryPoints, false, false)
+	handlers := routerManager.BuildHandlers(context.Background(), entryPoints, false)
 
 	w := httptest.NewRecorder()
 	req := testhelpers.MustNewRequest(http.MethodGet, "http://foo.bar/", nil)

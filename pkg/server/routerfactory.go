@@ -10,6 +10,7 @@ import (
 	"github.com/traefik/traefik/v2/pkg/server/middleware"
 	tcpmiddleware "github.com/traefik/traefik/v2/pkg/server/middleware/tcp"
 	"github.com/traefik/traefik/v2/pkg/server/router"
+	quicrouter "github.com/traefik/traefik/v2/pkg/server/router/quic"
 	tcprouter "github.com/traefik/traefik/v2/pkg/server/router/tcp"
 	udprouter "github.com/traefik/traefik/v2/pkg/server/router/udp"
 	"github.com/traefik/traefik/v2/pkg/server/service"
@@ -21,8 +22,10 @@ import (
 
 // RouterFactory the factory of TCP/UDP routers.
 type RouterFactory struct {
-	entryPointsTCP []string
-	entryPointsUDP []string
+	entryPointsHTTP []string
+	entryPointsQUIC []string
+	entryPointsTCP  []string
+	entryPointsUDP  []string
 
 	managerFactory  *service.ManagerFactory
 	metricsRegistry metrics.Registry
@@ -37,7 +40,7 @@ type RouterFactory struct {
 func NewRouterFactory(staticConfiguration static.Configuration, managerFactory *service.ManagerFactory, tlsManager *tls.Manager,
 	chainBuilder *middleware.ChainBuilder, pluginBuilder middleware.PluginsBuilder, metricsRegistry metrics.Registry,
 ) *RouterFactory {
-	var entryPointsTCP, entryPointsUDP []string
+	var entryPointsTCP, entryPointsUDP, entryPointsQUIC []string
 	for name, cfg := range staticConfiguration.EntryPoints {
 		protocol, err := cfg.GetProtocol()
 		if err != nil {
@@ -47,12 +50,18 @@ func NewRouterFactory(staticConfiguration static.Configuration, managerFactory *
 
 		if protocol == "udp" {
 			entryPointsUDP = append(entryPointsUDP, name)
+		} else if protocol == "quic" {
+			entryPointsQUIC = append(entryPointsQUIC, name)
 		} else {
 			entryPointsTCP = append(entryPointsTCP, name)
 		}
 	}
 
+	entryPointsHTTP := append(entryPointsTCP, entryPointsQUIC...)
+
 	return &RouterFactory{
+		entryPointsHTTP: entryPointsHTTP,
+		entryPointsQUIC: entryPointsQUIC,
 		entryPointsTCP:  entryPointsTCP,
 		entryPointsUDP:  entryPointsUDP,
 		managerFactory:  managerFactory,
@@ -64,26 +73,22 @@ func NewRouterFactory(staticConfiguration static.Configuration, managerFactory *
 }
 
 // CreateRouters creates new TCPRouters and UDPRouters.
-func (f *RouterFactory) CreateRouters(rtConf *runtime.Configuration) (map[string]*tcprouter.Router, map[string]udptypes.Handler) {
+func (f *RouterFactory) CreateRouters(rtConf *runtime.Configuration) (map[string]*tcprouter.Router, map[string]udptypes.Handler, map[string]*quicrouter.Router) {
 	ctx := context.Background()
 
 	// HTTP
 	serviceManager := f.managerFactory.Build(rtConf)
-
 	middlewaresBuilder := middleware.NewBuilder(rtConf.Middlewares, serviceManager, f.pluginBuilder)
-
 	routerManager := router.NewManager(rtConf, serviceManager, middlewaresBuilder, f.chainBuilder, f.metricsRegistry, f.tlsManager)
 
-	handlersNonTLS := routerManager.BuildHandlers(ctx, f.entryPointsTCP, false, false)
-	handlersTLS := routerManager.BuildHandlers(ctx, f.entryPointsTCP, true, false)
+	handlersNonTLS := routerManager.BuildHandlers(ctx, f.entryPointsHTTP, false)
+	handlersTLS := routerManager.BuildHandlers(ctx, f.entryPointsHTTP, true)
 
 	serviceManager.LaunchHealthCheck()
 
 	// TCP
 	svcTCPManager := tcp.NewManager(rtConf)
-
 	middlewaresTCPBuilder := tcpmiddleware.NewBuilder(rtConf.TCPMiddlewares)
-
 	rtTCPManager := tcprouter.NewManager(rtConf, svcTCPManager, middlewaresTCPBuilder, handlersNonTLS, handlersTLS, f.tlsManager)
 	routersTCP := rtTCPManager.BuildHandlers(ctx, f.entryPointsTCP)
 
@@ -92,7 +97,11 @@ func (f *RouterFactory) CreateRouters(rtConf *runtime.Configuration) (map[string
 	rtUDPManager := udprouter.NewManager(rtConf, svcUDPManager)
 	routersUDP := rtUDPManager.BuildHandlers(ctx, f.entryPointsUDP)
 
+	// QUIC/SCION
+	rtQUICManager := quicrouter.NewManager(rtConf, handlersNonTLS, handlersTLS, f.tlsManager)
+	routersQUIC := rtQUICManager.BuildHandlers(ctx, f.entryPointsQUIC)
+
 	rtConf.PopulateUsedBy()
 
-	return routersTCP, routersUDP
+	return routersTCP, routersUDP, routersQUIC
 }
