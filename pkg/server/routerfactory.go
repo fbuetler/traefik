@@ -74,8 +74,8 @@ func (f *RouterFactory) CreateRouters(rtConf *runtime.Configuration) (map[string
 
 	routerManager := router.NewManager(rtConf, serviceManager, middlewaresBuilder, f.chainBuilder, f.metricsRegistry, f.tlsManager)
 
-	handlersNonTLS := routerManager.BuildHandlers(ctx, f.entryPointsTCP, false)
-	handlersTLS := routerManager.BuildHandlers(ctx, f.entryPointsTCP, true)
+	handlersNonTLS := routerManager.BuildHandlers(ctx, f.entryPointsTCP, false, false)
+	handlersTLS := routerManager.BuildHandlers(ctx, f.entryPointsTCP, true, false)
 
 	serviceManager.LaunchHealthCheck()
 

@@ -58,9 +58,9 @@ func (m *Manager) getTCPRouters(ctx context.Context, entryPoints []string) map[s
 	return make(map[string]map[string]*runtime.TCPRouterInfo)
 }
 
-func (m *Manager) getHTTPRouters(ctx context.Context, entryPoints []string, tls bool) map[string]map[string]*runtime.RouterInfo {
+func (m *Manager) getHTTPRouters(ctx context.Context, entryPoints []string, tls bool, scion bool) map[string]map[string]*runtime.RouterInfo {
 	if m.conf != nil {
-		return m.conf.GetRoutersByEntryPoints(ctx, entryPoints, tls)
+		return m.conf.GetHTTPRoutersByEntryPoints(ctx, entryPoints, tls, scion)
 	}
 
 	return make(map[string]map[string]*runtime.RouterInfo)
@@ -69,7 +69,7 @@ func (m *Manager) getHTTPRouters(ctx context.Context, entryPoints []string, tls 
 // BuildHandlers builds the handlers for the given entrypoints.
 func (m *Manager) BuildHandlers(rootCtx context.Context, entryPoints []string) map[string]*Router {
 	entryPointsRouters := m.getTCPRouters(rootCtx, entryPoints)
-	entryPointsRoutersHTTP := m.getHTTPRouters(rootCtx, entryPoints, true)
+	entryPointsRoutersHTTP := m.getHTTPRouters(rootCtx, entryPoints, true, false)
 
 	entryPointHandlers := make(map[string]*Router)
 	for _, entryPointName := range entryPoints {

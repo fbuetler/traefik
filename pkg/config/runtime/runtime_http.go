@@ -11,8 +11,8 @@ import (
 	"github.com/traefik/traefik/v2/pkg/log"
 )
 
-// GetRoutersByEntryPoints returns all the http routers by entry points name and routers name.
-func (c *Configuration) GetRoutersByEntryPoints(ctx context.Context, entryPoints []string, tls bool) map[string]map[string]*RouterInfo {
+// GetHTTPRoutersByEntryPoints returns all the http routers by entry points name and routers name.
+func (c *Configuration) GetHTTPRoutersByEntryPoints(ctx context.Context, entryPoints []string, tls bool, scion bool) map[string]map[string]*RouterInfo {
 	entryPointsRouters := make(map[string]map[string]*RouterInfo)
 
 	for rtName, rt := range c.Routers {

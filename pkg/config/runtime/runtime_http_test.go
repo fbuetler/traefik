@@ -212,7 +212,7 @@ func TestGetRoutersByEntryPoints(t *testing.T) {
 		t.Run(test.desc, func(t *testing.T) {
 			t.Parallel()
 			runtimeConfig := NewConfig(test.conf)
-			actual := runtimeConfig.GetRoutersByEntryPoints(context.Background(), test.entryPoints, false)
+			actual := runtimeConfig.GetHTTPRoutersByEntryPoints(context.Background(), test.entryPoints, false, false)
 			assert.Equal(t, test.expected, actual)
 		})
 	}

@@ -251,7 +251,7 @@ func (e *TCPEntryPoint) Start(ctx context.Context) {
 				}
 			}
 
-			e.switcher.ServeTCP(newTrackedConnection(writeCloser, e.tracker))
+			e.switcher.ServeTCP(newTrackedTCPConnection(writeCloser, e.tracker))
 		})
 	}
 }
@@ -609,20 +609,20 @@ func createHTTPServer(ctx context.Context, ln net.Listener, configuration *stati
 	}, nil
 }
 
-func newTrackedConnection(conn tcp.WriteCloser, tracker *connectionTracker) *trackedConnection {
+func newTrackedTCPConnection(conn tcp.WriteCloser, tracker *connectionTracker) *trackedTCPConnection {
 	tracker.AddConnection(conn)
-	return &trackedConnection{
+	return &trackedTCPConnection{
 		WriteCloser: conn,
 		tracker:     tracker,
 	}
 }
 
-type trackedConnection struct {
+type trackedTCPConnection struct {
 	tracker *connectionTracker
 	tcp.WriteCloser
 }
 
-func (t *trackedConnection) Close() error {
+func (t *trackedTCPConnection) Close() error {
 	t.tracker.RemoveConnection(t.WriteCloser)
 	return t.WriteCloser.Close()
 }

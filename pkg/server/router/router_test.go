@@ -322,7 +322,7 @@ func TestRouterManager_Get(t *testing.T) {
 
 			routerManager := NewManager(rtConf, serviceManager, middlewaresBuilder, chainBuilder, metrics.NewVoidRegistry(), tlsManager)
 
-			handlers := routerManager.BuildHandlers(context.Background(), test.entryPoints, false)
+			handlers := routerManager.BuildHandlers(context.Background(), test.entryPoints, false, false)
 
 			w := httptest.NewRecorder()
 			req := testhelpers.MustNewRequest(http.MethodGet, "http://foo.bar/", nil)
@@ -429,7 +429,7 @@ func TestAccessLog(t *testing.T) {
 
 			routerManager := NewManager(rtConf, serviceManager, middlewaresBuilder, chainBuilder, metrics.NewVoidRegistry(), tlsManager)
 
-			handlers := routerManager.BuildHandlers(context.Background(), test.entryPoints, false)
+			handlers := routerManager.BuildHandlers(context.Background(), test.entryPoints, false, false)
 
 			w := httptest.NewRecorder()
 			req := testhelpers.MustNewRequest(http.MethodGet, "http://foo.bar/", nil)
@@ -792,8 +792,8 @@ func TestRuntimeConfiguration(t *testing.T) {
 
 			routerManager := NewManager(rtConf, serviceManager, middlewaresBuilder, chainBuilder, metrics.NewVoidRegistry(), tlsManager)
 
-			_ = routerManager.BuildHandlers(context.Background(), entryPoints, false)
-			_ = routerManager.BuildHandlers(context.Background(), entryPoints, true)
+			_ = routerManager.BuildHandlers(context.Background(), entryPoints, false, false)
+			_ = routerManager.BuildHandlers(context.Background(), entryPoints, true, false)
 
 			// even though rtConf was passed by argument to the manager builders above,
 			// it's ok to use it as the result we check, because everything worth checking
@@ -869,7 +869,7 @@ func TestProviderOnMiddlewares(t *testing.T) {
 
 	routerManager := NewManager(rtConf, serviceManager, middlewaresBuilder, chainBuilder, metrics.NewVoidRegistry(), tlsManager)
 
-	_ = routerManager.BuildHandlers(context.Background(), entryPoints, false)
+	_ = routerManager.BuildHandlers(context.Background(), entryPoints, false, false)
 
 	assert.Equal(t, []string{"chain@file", "m1@file"}, rtConf.Routers["router@file"].Middlewares)
 	assert.Equal(t, []string{"m1@file", "m2@file", "m1@file"}, rtConf.Middlewares["chain@file"].Chain.Middlewares)
@@ -938,7 +938,7 @@ func BenchmarkRouterServe(b *testing.B) {
 
 	routerManager := NewManager(rtConf, serviceManager, middlewaresBuilder, chainBuilder, metrics.NewVoidRegistry(), tlsManager)
 
-	handlers := routerManager.BuildHandlers(context.Background(), entryPoints, false)
+	handlers := routerManager.BuildHandlers(context.Background(), entryPoints, false, false)
 
 	w := httptest.NewRecorder()
 	req := testhelpers.MustNewRequest(http.MethodGet, "http://foo.bar/", nil)
