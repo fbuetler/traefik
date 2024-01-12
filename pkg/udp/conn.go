@@ -25,7 +25,7 @@ type Listener struct {
 	// It also serves as a sentinel for Shutdown to be idempotent.
 	accepting bool
 
-	acceptCh chan *Conn // no need for a Once, already indirectly guarded by accepting.
+	acceptCh chan net.Conn // no need for a Once, already indirectly guarded by accepting.
 
 	// timeout defines how long to wait on an idle session,
 	// before releasing its related resources.
@@ -45,7 +45,7 @@ func Listen(network string, laddr *net.UDPAddr, timeout time.Duration) (*Listene
 
 	l := &Listener{
 		pConn:     conn,
-		acceptCh:  make(chan *Conn),
+		acceptCh:  make(chan net.Conn),
 		conns:     make(map[string]*Conn),
 		accepting: true,
 		timeout:   timeout,
@@ -57,7 +57,7 @@ func Listen(network string, laddr *net.UDPAddr, timeout time.Duration) (*Listene
 }
 
 // Accept waits for and returns the next connection to the listener.
-func (l *Listener) Accept() (*Conn, error) {
+func (l *Listener) Accept() (net.Conn, error) {
 	c := <-l.acceptCh
 	if c == nil {
 		// l.acceptCh got closed
@@ -294,4 +294,24 @@ func (c *Conn) Close() error {
 	defer c.listener.mu.Unlock()
 	delete(c.listener.conns, c.rAddr.String())
 	return nil
+}
+
+func (c *Conn) LocalAddr() net.Addr {
+	return c.listener.Addr()
+}
+
+func (c *Conn) RemoteAddr() net.Addr {
+	return c.rAddr
+}
+
+func (c *Conn) SetDeadline(t time.Time) error {
+	return c.listener.pConn.SetDeadline(t)
+}
+
+func (c *Conn) SetReadDeadline(t time.Time) error {
+	return c.listener.pConn.SetReadDeadline(t)
+}
+
+func (c *Conn) SetWriteDeadline(t time.Time) error {
+	return c.listener.pConn.SetWriteDeadline(t)
 }

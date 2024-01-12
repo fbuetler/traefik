@@ -12,6 +12,13 @@ import (
 	"github.com/traefik/traefik/v2/pkg/udp"
 )
 
+type stoppableListener interface {
+	Accept() (net.Conn, error)
+	Addr() net.Addr
+	Shutdown(graceTimeout time.Duration) error
+	Close() error
+}
+
 // UDPEntryPoints maps UDP entry points by their names.
 type UDPEntryPoints map[string]*UDPEntryPoint
 
@@ -78,7 +85,7 @@ func (eps UDPEntryPoints) Switch(handlers map[string]udp.Handler) {
 
 // UDPEntryPoint is an entry point where we listen for UDP packets.
 type UDPEntryPoint struct {
-	listener               *udp.Listener
+	listener               stoppableListener
 	switcher               *udp.HandlerSwitcher
 	transportConfiguration *static.EntryPointsTransport
 }
@@ -95,7 +102,11 @@ func NewUDPEntryPoint(cfg *static.EntryPoint) (*UDPEntryPoint, error) {
 		return nil, err
 	}
 
-	return &UDPEntryPoint{listener: listener, switcher: &udp.HandlerSwitcher{}, transportConfiguration: cfg.Transport}, nil
+	return &UDPEntryPoint{
+		listener:               listener,
+		switcher:               &udp.HandlerSwitcher{},
+		transportConfiguration: cfg.Transport,
+	}, nil
 }
 
 // Start commences the listening for ep.

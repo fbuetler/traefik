@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	ptypes "github.com/traefik/paerser/types"
+
 	"github.com/traefik/traefik/v2/pkg/config/static"
 	"github.com/traefik/traefik/v2/pkg/udp"
 )
@@ -28,7 +29,7 @@ func TestShutdownUDPConn(t *testing.T) {
 	require.NoError(t, err)
 
 	go entryPoint.Start(context.Background())
-	entryPoint.Switch(udp.HandlerFunc(func(conn *udp.Conn) {
+	entryPoint.Switch(udp.HandlerFunc(func(conn net.Conn) {
 		for {
 			b := make([]byte, 1024*1024)
 			n, err := conn.Read(b)

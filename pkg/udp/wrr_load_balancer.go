@@ -2,6 +2,7 @@ package udp
 
 import (
 	"fmt"
+	"net"
 	"sync"
 
 	"github.com/traefik/traefik/v2/pkg/log"
@@ -28,7 +29,7 @@ func NewWRRLoadBalancer() *WRRLoadBalancer {
 }
 
 // ServeUDP forwards the connection to the right service.
-func (b *WRRLoadBalancer) ServeUDP(conn *Conn) {
+func (b *WRRLoadBalancer) ServeUDP(conn net.Conn) {
 	b.lock.Lock()
 	next, err := b.next()
 	b.lock.Unlock()
