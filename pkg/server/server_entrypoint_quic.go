@@ -317,15 +317,22 @@ func (s *scionListener) Shutdown(grateTimeOut time.Duration) error { return s.Cl
 var ErrQuicNotImplemented = errors.New("server does not implement QUIC without SCION")
 
 func buildQUICListener(ctx context.Context, cfg *static.EntryPoint) (stoppableListener, error) {
-	if cfg.SCION != nil {
-		listener, err := listenSCION(cfg.GetAddress())
-		if err != nil {
-			return nil, err
-		}
-		return &scionListener{listener}, nil
+	if cfg.SCION == nil {
+		return nil, ErrQuicNotImplemented
 	}
 
-	return nil, ErrQuicNotImplemented
+	listener, err := listenSCION(cfg.GetAddress())
+	if err != nil {
+		return nil, err
+	}
+	if cfg.ProxyProtocol != nil {
+		listener, err = buildProxyProtocolListener(ctx, cfg, listener)
+		if err != nil {
+			return nil, fmt.Errorf("error creating proxy protocol listener: %w", err)
+		}
+	}
+	return &scionListener{listener}, nil
+
 }
 
 // Copied from scion-apps/pkg/shttp
