@@ -857,8 +857,8 @@ func TestHandler_HTTP(t *testing.T) {
 			rtConf := &test.conf
 			// To lazily initialize the Statuses.
 			rtConf.PopulateUsedBy()
-			rtConf.GetHTTPRoutersByEntryPoints(context.Background(), []string{"web"}, false)
-			rtConf.GetHTTPRoutersByEntryPoints(context.Background(), []string{"web"}, true)
+			rtConf.GetHTTPRoutersByEntryPoints(context.Background(), []string{"web"}, false, true)
+			rtConf.GetHTTPRoutersByEntryPoints(context.Background(), []string{"web"}, true, true)
 
 			handler := New(static.Configuration{API: &static.API{}, Global: &static.Global{}}, rtConf)
 			server := httptest.NewServer(handler.createRouter())

@@ -60,7 +60,7 @@ func (m *Manager) getTCPRouters(ctx context.Context, entryPoints []string) map[s
 
 func (m *Manager) getHTTPRouters(ctx context.Context, entryPoints []string, tls bool) map[string]map[string]*runtime.RouterInfo {
 	if m.conf != nil {
-		return m.conf.GetHTTPRoutersByEntryPoints(ctx, entryPoints, tls)
+		return m.conf.GetHTTPRoutersByEntryPoints(ctx, entryPoints, tls, false)
 	}
 
 	return make(map[string]map[string]*runtime.RouterInfo)

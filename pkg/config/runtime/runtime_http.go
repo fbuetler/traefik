@@ -12,7 +12,7 @@ import (
 )
 
 // GetHTTPRoutersByEntryPoints returns all the http routers by entry points name and routers name.
-func (c *Configuration) GetHTTPRoutersByEntryPoints(ctx context.Context, entryPoints []string, tls bool) map[string]map[string]*RouterInfo {
+func (c *Configuration) GetHTTPRoutersByEntryPoints(ctx context.Context, entryPoints []string, tls bool, reportRouterWithNoEntrypoint bool) map[string]map[string]*RouterInfo {
 	entryPointsRouters := make(map[string]map[string]*RouterInfo)
 
 	for rtName, rt := range c.Routers {
@@ -25,9 +25,9 @@ func (c *Configuration) GetHTTPRoutersByEntryPoints(ctx context.Context, entryPo
 		entryPointsCount := 0
 		for _, entryPointName := range rt.EntryPoints {
 			if !slices.Contains(entryPoints, entryPointName) {
-				rt.AddError(fmt.Errorf("entryPoint %q doesn't exist", entryPointName), false)
 				logger.WithField(log.EntryPointName, entryPointName).
-					Errorf("entryPoint %q doesn't exist", entryPointName)
+					WithField("entrypoints", entryPoints).
+					Debugf("ignoring incompatible entryPoint %q", entryPointName)
 				continue
 			}
 
@@ -41,7 +41,7 @@ func (c *Configuration) GetHTTPRoutersByEntryPoints(ctx context.Context, entryPo
 			entryPointsRouters[entryPointName][rtName] = rt
 		}
 
-		if entryPointsCount == 0 {
+		if entryPointsCount == 0 && reportRouterWithNoEntrypoint {
 			rt.AddError(fmt.Errorf("no valid entryPoint for this router"), true)
 			logger.Error("no valid entryPoint for this router")
 		}
