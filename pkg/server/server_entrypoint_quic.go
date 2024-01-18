@@ -170,6 +170,9 @@ func (ep *QUICEntryPoint) Start(ctx context.Context) {
 	for {
 		conn, err := ep.listener.Accept()
 		if err != nil {
+			ep.httpServer.QUICForwarder.errChan <- err
+			ep.httpsServer.QUICForwarder.errChan <- err
+
 			// Only errClosedListener can happen that's why we return
 			return
 		}
@@ -214,26 +217,6 @@ func (ep *QUICEntryPoint) Shutdown(ctx context.Context) {
 	logger.Debugf("Waiting %s seconds before killing connections.", graceTimeOut)
 
 	var wg sync.WaitGroup
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := ep.listener.Shutdown(graceTimeOut)
-		if err == nil {
-			return
-		}
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			logger.Debugf("Listener failed to shutdown within deadline because: %s", err)
-			if err = ep.listener.Close(); err != nil {
-				logger.Error(err)
-			}
-			return
-		}
-		logger.Error(err)
-		// We expect Close to fail again because Shutdown most likely failed when trying to close a listener.
-		// We still call it however, to make sure that all connections get closed as well.
-		ep.listener.Close()
-	}()
 
 	shutdownServer := func(server stoppable) {
 		defer wg.Done()
@@ -331,8 +314,8 @@ func buildQUICListener(ctx context.Context, cfg *static.EntryPoint) (stoppableLi
 			return nil, fmt.Errorf("error creating proxy protocol listener: %w", err)
 		}
 	}
-	return &scionListener{listener}, nil
 
+	return &scionListener{listener}, nil
 }
 
 // Copied from scion-apps/pkg/shttp
@@ -369,7 +352,6 @@ func newQUICForwarder(ln net.Listener) *quicForwarder {
 
 // ServeQUIC uses the connection to serve it later in "Accept".
 func (h *quicForwarder) ServeQUIC(conn net.Conn) {
-	fmt.Println("3: quicForwarder/ServeQUIC")
 	h.connChan <- conn
 }
 
